@@ -21,6 +21,7 @@ watchdog: http://folk.uio.no/jeanra/Microelectronics/ArduinoWatchdog.html
 -If no motor temp sensor is detected, use safe minimum delay value
 -Add program state where motor temp is to high and speed is austed to cool extra, else shutdown
 -Temp used for determining speed. if threshold 26 is reached speed will increase
+-Disable interrupts. in full on and off state. instead of off flag
 */
 
 
@@ -62,8 +63,7 @@ OneWire oneWire(MOTOR_TEMP); //dallas temp sensor. create onewire bus on this pi
 DallasTemperature sensors(&oneWire); // Pass our oneWire reference to Dallas Temperature. 						
 DeviceAddress insideThermometer; // arrays to hold device address
 
-
-								 ///Globals: main variables
+///Globals: main variables
 int triacDelay = 0;
 
 ///Globals: support variables
@@ -141,50 +141,55 @@ void setup() {
 void loop() {
 	wdt_reset(); //reset watchdog timer
 
+
+
 	int potentiometer = analogRead(MANUAL_POT); //variable that stores potentiometer value (0-1023)// read the input on analog pin 0:
 	int potPercent = map(potentiometer, 0, 1023, 0, 100);
 	int potState = 0;
 
 
-	if (potPercent <= 10) potState = 0;
-	if (potPercent > 10 && potPercent < 90) potState = 1;
-	if (potPercent >= 90) potState = 2;
+	if (potPercent <= 10) potState = 0; //off
+	if (potPercent > 10 && potPercent < 90) potState = 1; //manual control
+	if (potPercent >= 90 && potPercent < 95) potState = 2; //auto control based on air temperature
+	if (potPercent >= 95) potState = 3; //full on
 
 	switch (potState)
 	{
-	case 0:
+	case 0: //off state. Relay open (triac closed, safety feature if relays fails)
 		offFlag = true;
 		digitalWrite(RELAY, !LOW);
-		digitalWrite(TRIAC_DRIVER, HIGH); //safety to prevent motor temp rising due tho triac leackage current (motor is aircooled)
+		digitalWrite(TRIAC_DRIVER, HIGH); //safety to prevent motor temp rising due tho triac leackage current (motor is aircooled) if relay fails.
 
 		digitalWrite(RED_LED, LOW);
 		digitalWrite(GREEN_LED, LOW);
 		digitalWrite(BLUE_LED, HIGH);
 		break;
-	case 1:
+	case 1: //Manual control
 		digitalWrite(RELAY, !HIGH);
 		offFlag = false;
+
+		triacDelay = map(potPercent, 10, 90, 7000, 3000); //values 7000 and 3000 work best
+
 		digitalWrite(RED_LED, LOW);
 		digitalWrite(GREEN_LED, HIGH);
 		digitalWrite(BLUE_LED, LOW);
 		break;
 	case 2:
+		
+		break;
+	case 3: //full on state
 		digitalWrite(RELAY, !HIGH);
 		offFlag = true;
 		digitalWrite(TRIAC_DRIVER, HIGH);
 		digitalWrite(RED_LED, HIGH);
 		digitalWrite(GREEN_LED, LOW);
 		digitalWrite(BLUE_LED, LOW);
+		break;
 	default:
 		break;
 	}
 
 
-	triacDelay = map(potPercent, 10, 90, 7000, 3000); //values 6500 and 3000 work best
-
-													  // print out the value you read:
-													  //Serial.print("pot:");
-													  //Serial.println(potentiometer);
 	Serial.print("Triacdelay:");
 	Serial.println(triacDelay);
 
@@ -198,6 +203,10 @@ void loop() {
 
 	Serial.print("Humidity %: ");
 	Serial.println(getHumidity());
+
+	// print out the value you read:
+	//Serial.print("pot:");
+	//Serial.println(potentiometer);
 }
 
 
